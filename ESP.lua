@@ -20,20 +20,58 @@ local CategoryColors = {
     ["Iron"] = Color3.fromRGB(150, 150, 150),
     ["Crit"] = Color3.fromRGB(255, 220, 0),
     ["Vitality"] = Color3.fromRGB(0, 180, 255),
-    ["General"] = Color3.fromRGB(255, 255, 255)
+    ["General"] = Color3.fromRGB(255, 255, 255),
+    ["Player"] = Color3.fromRGB(255, 0, 0) -- Red for Players
 }
 
 local espobjs = {}
+local playerESP = {}
 local espfold = Instance.new("Folder", localPlayer.PlayerGui)
 local gui = Instance.new("ScreenGui", localPlayer.PlayerGui)
-gui.Name = "ProArrowESP"
+gui.Name = "MasterESP"
 gui.ResetOnSpawn = false
 
 local hidden = false
 
+--- PLAYER ESP LOGIC ---
+local function addPlayerESP(player)
+    if player == localPlayer then return end
+
+    local function createHighlight(char)
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PlayerHighlight"
+        highlight.FillTransparency = 1 -- Only the outline
+        highlight.OutlineColor = CategoryColors.Player
+        highlight.OutlineTransparency = 0
+        highlight.Adornee = char
+        highlight.Parent = espfold
+        
+        -- Billboard for Name/Distance
+        local billboard = Instance.new("BillboardGui", espfold)
+        billboard.Size = UDim2.new(0, 100, 0, 50)
+        billboard.AlwaysOnTop = true
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.Adornee = char:WaitForChild("Head", 5)
+
+        local label = Instance.new("TextLabel", billboard)
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = player.Name
+        label.TextColor3 = CategoryColors.Player
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 14
+        label.TextStrokeTransparency = 0.5
+
+        playerESP[player] = {highlight = highlight, billboard = billboard, label = label}
+    end
+
+    player.CharacterAdded:Connect(createHighlight)
+    if player.Character then createHighlight(player.Character) end
+end
+
+--- ITEM ESP LOGIC ---
 local function espadd(v, icon, category)
     if not v then return end
-    
     local color = CategoryColors[category] or CategoryColors.General
 
     local billboard = Instance.new("BillboardGui", espfold)
@@ -70,34 +108,25 @@ local function espadd(v, icon, category)
     espobjs[v] = {gui = billboard, img = image, text = distLabel, arrow = arrow, color = color}
 end
 
+--- UPDATE LOOP ---
 RunService.RenderStepped:Connect(function()
     if hidden then return end
-    local char = localPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local t = tick()
-
+    -- Update Item ESP
     for part, data in pairs(espobjs) do
         if part and part.Parent then
             local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
             local distance = (root.Position - part.Position).Magnitude
-           
-            local pulse = (math.sin(t * 5) * 5)
-            data.img.Size = UDim2.new(0, 35 + pulse, 0, 35 + pulse)
-            
             data.text.Text = math.floor(distance) .. " studs"
             
             if not onScreen then
                 data.arrow.Visible = true
                 local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
                 local direction = (Vector2.new(pos.X, pos.Y) - screenCenter).Unit
-                
-                local edgeX = Camera.ViewportSize.X * 0.08
-                local edgeY = Camera.ViewportSize.Y * 0.08
-                local clampedX = math.clamp(pos.X, edgeX, Camera.ViewportSize.X - edgeX)
-                local clampedY = math.clamp(pos.Y, edgeY, Camera.ViewportSize.Y - edgeY)
-                
+                local clampedX = math.clamp(pos.X, 50, Camera.ViewportSize.X - 50)
+                local clampedY = math.clamp(pos.Y, 50, Camera.ViewportSize.Y - 50)
                 data.arrow.Position = UDim2.new(0, clampedX, 0, clampedY)
                 data.arrow.Rotation = math.deg(math.atan2(direction.Y, direction.X)) + 90
             else
@@ -109,15 +138,22 @@ RunService.RenderStepped:Connect(function()
             espobjs[part] = nil
         end
     end
+
+    -- Update Player Distances
+    for player, data in pairs(playerESP) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = (root.Position - player.Character.HumanoidRootPart.Position).Magnitude
+            data.label.Text = player.Name .. "\n[" .. math.floor(dist) .. "s]"
+        end
+    end
 end)
 
+--- SETUP ---
 local function setup()
     local function add(tag, icon, cat, custom)
         if custom then
-            workspace.ChildAdded:Connect(function(v) if v.Name == tag then task.wait(0.1) espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end end)
             for _, v in pairs(workspace:GetChildren()) do if v.Name == tag then espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end end
         else
-            collectionService:GetInstanceAddedSignal(tag):Connect(function(v) task.wait(0.1) espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end)
             for _, v in pairs(collectionService:GetTagged(tag)) do espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end
         end
     end
@@ -126,6 +162,9 @@ local function setup()
     add("treeOrb", "natures_essence_1", "General", false)
     add("CritStar", "crit_star", "Crit", true)
     add("VitalityStar", "vitality_star", "Vitality", true)
+
+    for _, p in pairs(Players:GetPlayers()) do addPlayerESP(p) end
+    Players.PlayerAdded:Connect(addPlayerESP)
 end
 
 setup()
