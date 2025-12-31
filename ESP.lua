@@ -21,7 +21,7 @@ local CategoryColors = {
     ["Crit"] = Color3.fromRGB(255, 220, 0),
     ["Vitality"] = Color3.fromRGB(0, 180, 255),
     ["General"] = Color3.fromRGB(255, 255, 255),
-    ["Player"] = Color3.fromRGB(255, 0, 0) -- Red for Players
+    ["Player"] = Color3.fromRGB(255, 0, 0) 
 }
 
 local espobjs = {}
@@ -33,20 +33,35 @@ gui.ResetOnSpawn = false
 
 local hidden = false
 
---- PLAYER ESP LOGIC ---
+
+local function clearPlayerESP(player)
+    if playerESP[player] then
+        if playerESP[player].highlight then playerESP[player].highlight:Destroy() end
+        if playerESP[player].billboard then playerESP[player].billboard:Destroy() end
+        playerESP[player] = nil
+    end
+end
+
 local function addPlayerESP(player)
     if player == localPlayer then return end
 
-    local function createHighlight(char)
+    local function updateESP()
+        clearPlayerESP(player)
+
+        local isTeammate = player.Team ~= nil and player.Team == localPlayer.Team
+        if isTeammate then return end
+
+        local char = player.Character
+        if not char then return end
+
         local highlight = Instance.new("Highlight")
         highlight.Name = "PlayerHighlight"
-        highlight.FillTransparency = 1 -- Only the outline
+        highlight.FillTransparency = 1 
         highlight.OutlineColor = CategoryColors.Player
         highlight.OutlineTransparency = 0
         highlight.Adornee = char
         highlight.Parent = espfold
         
-        -- Billboard for Name/Distance
         local billboard = Instance.new("BillboardGui", espfold)
         billboard.Size = UDim2.new(0, 100, 0, 50)
         billboard.AlwaysOnTop = true
@@ -65,11 +80,19 @@ local function addPlayerESP(player)
         playerESP[player] = {highlight = highlight, billboard = billboard, label = label}
     end
 
-    player.CharacterAdded:Connect(createHighlight)
-    if player.Character then createHighlight(player.Character) end
+    player.CharacterAdded:Connect(updateESP)
+    player:GetPropertyChangedSignal("Team"):Connect(updateESP)
+    if player.Character then updateESP() end
 end
 
---- ITEM ESP LOGIC ---
+
+localPlayer:GetPropertyChangedSignal("Team"):Connect(function()
+    for _, p in pairs(Players:GetPlayers()) do
+        addPlayerESP(p)
+    end
+end)
+
+
 local function espadd(v, icon, category)
     if not v then return end
     local color = CategoryColors[category] or CategoryColors.General
@@ -108,13 +131,12 @@ local function espadd(v, icon, category)
     espobjs[v] = {gui = billboard, img = image, text = distLabel, arrow = arrow, color = color}
 end
 
---- UPDATE LOOP ---
 RunService.RenderStepped:Connect(function()
     if hidden then return end
     local root = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- Update Item ESP
+  
     for part, data in pairs(espobjs) do
         if part and part.Parent then
             local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
@@ -139,11 +161,14 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Update Player Distances
+   
     for player, data in pairs(playerESP) do
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local dist = (root.Position - player.Character.HumanoidRootPart.Position).Magnitude
             data.label.Text = player.Name .. "\n[" .. math.floor(dist) .. "s]"
+        else
+         
+            clearPlayerESP(player)
         end
     end
 end)
@@ -152,9 +177,15 @@ end)
 local function setup()
     local function add(tag, icon, cat, custom)
         if custom then
-            for _, v in pairs(workspace:GetChildren()) do if v.Name == tag then espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end end
+            for _, v in pairs(workspace:GetChildren()) do 
+                if v.Name == tag then 
+                    espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) 
+                end 
+            end
         else
-            for _, v in pairs(collectionService:GetTagged(tag)) do espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) end
+            for _, v in pairs(collectionService:GetTagged(tag)) do 
+                espadd(v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart"), icon, cat) 
+            end
         end
     end
 
@@ -165,6 +196,7 @@ local function setup()
 
     for _, p in pairs(Players:GetPlayers()) do addPlayerESP(p) end
     Players.PlayerAdded:Connect(addPlayerESP)
+    Players.PlayerRemoving:Connect(clearPlayerESP)
 end
 
 setup()
