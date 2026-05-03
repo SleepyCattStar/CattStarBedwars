@@ -11,7 +11,8 @@ return {
     premium_users = {
         7211114145,
         10336013870,
-        9488284508
+        9488284508,
+        5608936098  -- Drachen
     },
     
     blacklisted_users = {
